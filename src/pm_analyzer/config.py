@@ -8,6 +8,11 @@ from pathlib import Path
 
 _VALID_LOG_LEVELS = frozenset({"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"})
 
+# Preventive-maintenance policy. These values are intentionally simple to edit.
+PM_INTERVAL_KM = 10_000
+DUE_SOON_PERCENT = 80
+IDLE_HOUR_EQUIVALENT_KM = 30
+
 
 @dataclass(frozen=True, slots=True)
 class Settings:
@@ -34,4 +39,3 @@ class Settings:
             allowed = ", ".join(sorted(_VALID_LOG_LEVELS))
             raise ValueError(f"PM_ANALYZER_LOG_LEVEL must be one of: {allowed}")
         return self
-

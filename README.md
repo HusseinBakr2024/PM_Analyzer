@@ -3,9 +3,9 @@
 PM Analyzer is a Python project for joining SAP maintenance exports with GPS fleet data and
 producing traceable maintenance, utilization, and cost analytics.
 
-The project is being implemented incrementally. The current milestone provides only the
-project foundation: packaging, configuration, logging, a command-line entry point, and tests.
-Excel ingestion and business analytics will be added in later, separately reviewed milestones.
+The application provides an Arabic desktop workflow for selecting one to seven GPS workbooks,
+the SAP maintenance-order workbook, and the SAP material-document workbook. It calculates
+preventive-maintenance status and exports a ten-sheet, right-to-left Excel report.
 
 ## Requirements
 
@@ -20,6 +20,39 @@ python -m pip install -e '.[dev]'
 ```
 
 ## Commands
+
+### Arabic desktop application (recommended)
+
+On Windows, double-click `تشغيل_PM_Analyzer.bat`. Alternatively run:
+
+```bash
+PYTHONPATH=src python -m pm_analyzer.gui
+```
+
+Select the files in this order:
+
+1. One to seven GPS files.
+2. `Maintenance Notifications and Orders` as the authoritative asset/order source.
+3. `Material Documents` for preventive-maintenance materials and posting dates.
+4. Choose the output location and press the report button.
+
+The maintenance interval and due-soon percentage can be edited in the application. Their
+defaults, together with the 30-km idle-hour equivalent, are defined in `config.py`.
+
+### Command-line report
+
+```bash
+pm-analyzer analyze \
+  --maintenance "Maintenance Notifications and Orders.xlsx" \
+  --materials "Material Documents.xlsx" \
+  --gps GPS-1.xlsx GPS-2.xlsx \
+  --output "preventive-maintenance-report.xlsx"
+```
+
+The generated workbook contains the dashboard, due analysis, status-specific lists, latest
+maintenance, merged GPS detail, preventive-material detail, and data-quality findings.
+
+### Diagnostic commands
 
 Display the installed version:
 
