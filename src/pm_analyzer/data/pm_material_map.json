@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "pm_score_threshold": 5,
+  "categories": [
+    {"name": "Engine Oil", "weight": 5, "enabled": true, "keywords": ["ENGINE OIL", "MOTOR OIL", "CK-4", "CK4", "CI-4", "CI4", "15W40", "15W-40", "10W30", "10W-30", "SAE", "LUBRICANT"]},
+    {"name": "Oil Filter", "weight": 3, "enabled": true, "keywords": ["OIL FILTER", "FILTER OIL", "LUBE FILTER"]},
+    {"name": "Fuel Filter", "weight": 2, "enabled": true, "keywords": ["FUEL FILTER", "DIESEL FILTER", "FUEL CARTRIDGE"]},
+    {"name": "Air Filter", "weight": 2, "enabled": true, "keywords": ["AIR FILTER", "AIR CLEANER"]},
+    {"name": "Water Separator", "weight": 2, "enabled": true, "keywords": ["WATER SEPARATOR", "FUEL SEPARATOR", "FILTER-SEPARATOR", "FUEL/WATER SEPARATOR"]},
+    {"name": "Grease", "weight": 1, "enabled": true, "keywords": ["GREASE"]},
+    {"name": "Coolant", "weight": 1, "enabled": true, "keywords": ["COOLANT", "ANTIFREEZE", "ANTI-FREEZE"]},
+    {"name": "Hydraulic Filter", "weight": 1, "enabled": true, "keywords": ["HYDRAULIC FILTER"]}
+  ],
+  "excluded_phrases": ["OIL SEAL", "ELECTRICAL COIL", "GEAR OIL", "ATF OIL", "HYDRAULIC OIL", "COMPRESSOR OIL", "BRAKE OIL"],
+  "breakdown_indicators": ["ENGINE ASSY", "ENGINE ASSEMBLY", "GEARBOX ASSY", "TRANSMISSION ASSY", "CRANKSHAFT", "CYLINDER BLOCK"]
+}
