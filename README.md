@@ -37,7 +37,12 @@ Select the files in this order:
 4. Choose the output location and press the report button.
 
 The maintenance interval and due-soon percentage can be edited in the application. Their
-defaults, together with the 30-km idle-hour equivalent, are defined in `config.py`.
+defaults, together with the 30-km idle-hour equivalent, are defined in `config.py`. The main
+window exposes all three policy inputs so the user can change them before every report:
+
+- preventive-maintenance interval in kilometers;
+- equivalent kilometers for one idle hour;
+- due-soon percentage.
 
 ### Command-line report
 
@@ -46,6 +51,9 @@ pm-analyzer analyze \
   --maintenance "Maintenance Notifications and Orders.xlsx" \
   --materials "Material Documents.xlsx" \
   --gps GPS-1.xlsx GPS-2.xlsx \
+  --interval-km 10000 \
+  --idle-equivalent-km 30 \
+  --due-soon-percent 80 \
   --output "preventive-maintenance-report.xlsx"
 ```
 

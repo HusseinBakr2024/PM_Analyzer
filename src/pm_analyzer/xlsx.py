@@ -105,8 +105,11 @@ def write_report(path: Path, sheets: Sequence[tuple[str, Sequence[str], Iterable
         archive.writestr("xl/styles.xml", _styles())
         archive.writestr("docProps/core.xml", _core_properties())
         archive.writestr("docProps/app.xml", _app_properties(sheet_list))
-        for index, (_, headers, rows) in enumerate(sheet_list, 1):
-            archive.writestr(f"xl/worksheets/sheet{index}.xml", _sheet_xml(headers, rows))
+        for index, (name, headers, rows) in enumerate(sheet_list, 1):
+            archive.writestr(
+                f"xl/worksheets/sheet{index}.xml",
+                _sheet_xml(name, headers, rows, index),
+            )
 
 
 def _xml_cell(reference: str, value: object, style: int) -> str:
@@ -122,30 +125,55 @@ def _xml_cell(reference: str, value: object, style: int) -> str:
     return f'<c r="{reference}" s="{style}" t="inlineStr"><is><t>{escaped}</t></is></c>'
 
 
-def _sheet_xml(headers: list[str], rows: list[Sequence[object]]) -> str:
+def _sheet_xml(
+    name: str, headers: list[str], rows: list[Sequence[object]], sheet_index: int
+) -> str:
     all_rows: list[Sequence[object]] = [headers, *rows]
     width = max((len(row) for row in all_rows), default=1)
     row_xml = []
     for row_number, row in enumerate(all_rows, 1):
         cells = []
         for column_number, value in enumerate(row):
-            style = 1 if row_number == 1 else _status_style(row, column_number, value)
+            style = _cell_style(name, row_number, column_number, value)
             cells.append(_xml_cell(f"{_column_letters(column_number)}{row_number}", value, style))
-        row_xml.append(f'<row r="{row_number}">{"".join(cells)}</row>')
+        height = ' ht="30" customHeight="1"' if row_number == 1 else ''
+        row_xml.append(f'<row r="{row_number}"{height}>{"".join(cells)}</row>')
     last = f"{_column_letters(width - 1)}{max(len(all_rows), 1)}"
+    widths = _column_widths(all_rows, width)
+    tab_colors = ("FF1F4E78", "FF4472C4", "FFC00000", "FFFFC000", "FF7F8C8D")
+    tab_color = tab_colors[(sheet_index - 1) % len(tab_colors)]
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        f'<worksheet xmlns="{_MAIN}"><sheetViews><sheetView rightToLeft="1" workbookViewId="0">'
+        f'<worksheet xmlns="{_MAIN}"><sheetPr><tabColor rgb="{tab_color}"/></sheetPr>'
+        '<sheetViews><sheetView rightToLeft="1" showGridLines="0" workbookViewId="0">'
         '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>'
         '</sheetView></sheetViews><cols>'
-        + "".join(f'<col min="{i}" max="{i}" width="20" customWidth="1"/>' for i in range(1, width + 1))
+        + "".join(
+            f'<col min="{i}" max="{i}" width="{column_width}" customWidth="1"/>'
+            for i, column_width in enumerate(widths, 1)
+        )
         + f'</cols><sheetData>{"".join(row_xml)}</sheetData>'
-        f'<autoFilter ref="A1:{last}"/><pageSetup orientation="landscape" fitToWidth="1"/>'
+        f'<autoFilter ref="A1:{last}"/><printOptions horizontalCentered="1"/>'
+        '<pageMargins left="0.25" right="0.25" top="0.5" bottom="0.5" header="0.2" footer="0.2"/>'
+        '<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>'
         '</worksheet>'
     )
 
 
-def _status_style(row: Sequence[object], column: int, value: object) -> int:
+def _column_widths(rows: list[Sequence[object]], width: int) -> list[int]:
+    result = []
+    for column in range(width):
+        longest = max(
+            (len(str(row[column])) for row in rows[:250] if column < len(row)),
+            default=10,
+        )
+        result.append(min(max(longest + 3, 12), 38))
+    return result
+
+
+def _cell_style(name: str, row_number: int, column: int, value: object) -> int:
+    if row_number == 1:
+        return 1
     if str(value) in {"OK", "سليم"}:
         return 2
     if str(value) in {"Due Soon", "صيانة قريبة"}:
@@ -154,7 +182,11 @@ def _status_style(row: Sequence[object], column: int, value: object) -> int:
         return 4
     if str(value) in {"No GPS Data", "No Previous PM"}:
         return 5
-    return 0
+    if name == "لوحة التحكم":
+        return 8 if column == 0 else 9
+    if isinstance(value, (int, float)):
+        return 6 if row_number % 2 == 0 else 7
+    return 10 if row_number % 2 == 0 else 0
 
 
 def _content_types(count: int) -> str:
@@ -177,9 +209,17 @@ def _workbook_relationships(count: int) -> str:
 
 
 def _styles() -> str:
-    fills = '<fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' + "".join(f'<fill><patternFill patternType="solid"><fgColor rgb="{color}"/><bgColor indexed="64"/></patternFill></fill>' for color in ("FF1F4E78", "FFC6EFCE", "FFFFEB9C", "FFFFC7CE", "FFD9E1F2"))
-    xfs = '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center"/></xf>' + "".join(f'<xf numFmtId="0" fontId="0" fillId="{i}" borderId="0" xfId="0"/>' for i in range(3, 7))
-    return f'<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="{_MAIN}"><fonts count="2"><font><sz val="11"/><name val="Arial"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Arial"/></font></fonts><fills count="7">{fills}</fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="6">{xfs}</cellXfs></styleSheet>'
+    colors = ("FF1F4E78", "FFC6EFCE", "FFFFEB9C", "FFFFC7CE", "FFD9E1F2", "FFF2F6FA", "FFD9EAF7", "FF5B9BD5")
+    fills = '<fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' + "".join(f'<fill><patternFill patternType="solid"><fgColor rgb="{color}"/><bgColor indexed="64"/></patternFill></fill>' for color in colors)
+    border = '<border><left style="thin"><color rgb="FFD9E2F3"/></left><right style="thin"><color rgb="FFD9E2F3"/></right><top style="thin"><color rgb="FFD9E2F3"/></top><bottom style="thin"><color rgb="FFD9E2F3"/></bottom></border>'
+    base = '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>'
+    header = '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'
+    statuses = "".join(f'<xf numFmtId="0" fontId="2" fillId="{fill}" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center"/></xf>' for fill in range(3, 7))
+    numeric = '<xf numFmtId="4" fontId="0" fillId="0" borderId="1" xfId="0"/><xf numFmtId="4" fontId="0" fillId="7" borderId="1" xfId="0"/>'
+    dashboard = '<xf numFmtId="0" fontId="2" fillId="8" borderId="1" xfId="0"/><xf numFmtId="4" fontId="3" fillId="9" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center"/></xf>'
+    alternate = '<xf numFmtId="0" fontId="0" fillId="7" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>'
+    xfs = base + header + statuses + numeric + dashboard + alternate
+    return f'<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="{_MAIN}"><fonts count="4"><font><sz val="10"/><name val="Arial"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Arial"/></font><font><b/><sz val="10"/><name val="Arial"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="14"/><name val="Arial"/></font></fonts><fills count="10">{fills}</fills><borders count="2"><border/>{border}</borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="11">{xfs}</cellXfs></styleSheet>'
 
 
 def _core_properties() -> str:

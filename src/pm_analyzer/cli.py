@@ -25,6 +25,9 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_parser.add_argument("--materials", type=Path, required=True)
     analyze_parser.add_argument("--gps", type=Path, nargs="+", required=True)
     analyze_parser.add_argument("--output", type=Path, required=True)
+    analyze_parser.add_argument("--interval-km", type=int, default=10_000)
+    analyze_parser.add_argument("--due-soon-percent", type=int, default=80)
+    analyze_parser.add_argument("--idle-equivalent-km", type=float, default=30)
     return parser
 
 
@@ -39,7 +42,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.command == "analyze":
         from pm_analyzer.engine import analyze, export_report
 
-        result = analyze(args.maintenance, args.materials, args.gps)
+        result = analyze(
+            args.maintenance,
+            args.materials,
+            args.gps,
+            interval_km=args.interval_km,
+            due_soon_percent=args.due_soon_percent,
+            idle_hour_equivalent_km=args.idle_equivalent_km,
+        )
         export_report(result, args.output)
         print(f"report={args.output}")
         print(f"assets={len(result.analysis)}")

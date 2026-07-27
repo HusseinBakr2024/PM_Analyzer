@@ -1,7 +1,15 @@
 from datetime import date
 from pathlib import Path
 
-from pm_analyzer.engine import classify_material, normalize_asset, parse_date, parse_duration_hours
+import pytest
+
+from pm_analyzer.engine import (
+    analyze,
+    classify_material,
+    normalize_asset,
+    parse_date,
+    parse_duration_hours,
+)
 from pm_analyzer.xlsx import read_workbook, write_report
 
 
@@ -21,6 +29,16 @@ def test_source_formats_are_parsed() -> None:
     assert parse_duration_hours("1:30:00") == 1.5
     assert parse_duration_hours("2 days 1:00:00") == 49
     assert parse_date("46174") == date(2026, 6, 1)
+
+
+def test_negative_idle_equivalent_is_rejected() -> None:
+    with pytest.raises(ValueError, match="policy"):
+        analyze(
+            Path("maintenance.xlsx"),
+            Path("materials.xlsx"),
+            [Path("gps.xlsx")],
+            idle_hour_equivalent_km=-1,
+        )
 
 
 def test_generated_report_can_be_read_back(tmp_path: Path) -> None:

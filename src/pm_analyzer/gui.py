@@ -23,33 +23,54 @@ class AnalyzerApp(ttk.Frame):
         self.status = tk.StringVar(value="اختر الملفات بالترتيب ثم اضغط إنشاء التقرير")
         self.interval = tk.IntVar(value=PM_INTERVAL_KM)
         self.threshold = tk.IntVar(value=DUE_SOON_PERCENT)
+        self.idle_equivalent = tk.DoubleVar(value=30)
         self._build()
 
     def _build(self) -> None:
         self.root.title("PM Analyzer - تحليل الصيانة الوقائية")
-        self.root.geometry("760x560")
-        self.root.minsize(700, 520)
-        ttk.Label(self, text="تحليل الصيانة الوقائية", font=("Arial", 20, "bold")).pack(pady=(0, 15))
-        ttk.Label(self, text="1) ملفات GPS (من ملف واحد إلى 7 ملفات)", font=("Arial", 12, "bold")).pack(anchor="e")
-        ttk.Button(self, text="استدعاء ملفات GPS", command=self._select_gps).pack(fill="x", pady=5)
-        self.gps_label = ttk.Label(self, text="لم يتم اختيار ملفات", anchor="e")
-        self.gps_label.pack(fill="x")
-        ttk.Separator(self).pack(fill="x", pady=12)
-        ttk.Label(self, text="2) ملف أوامر الصيانة (الملف الأساسي)", font=("Arial", 12, "bold")).pack(anchor="e")
-        ttk.Button(self, text="اختيار ملف أوامر الصيانة", command=self._select_maintenance).pack(fill="x", pady=5)
-        self.maintenance_label = ttk.Label(self, text="لم يتم اختيار ملف", anchor="e")
-        self.maintenance_label.pack(fill="x")
-        ttk.Label(self, text="3) ملف صرف المواد", font=("Arial", 12, "bold")).pack(anchor="e", pady=(12, 0))
-        ttk.Button(self, text="اختيار ملف صرف المواد", command=self._select_materials).pack(fill="x", pady=5)
-        self.materials_label = ttk.Label(self, text="لم يتم اختيار ملف", anchor="e")
+        self.root.geometry("900x700")
+        self.root.minsize(820, 650)
+        self.root.configure(background="#F3F6FA")
+        style = ttk.Style(self.root)
+        style.configure("TFrame", background="#F3F6FA")
+        style.configure("Card.TFrame", background="#FFFFFF", relief="solid", borderwidth=1)
+        style.configure("Title.TLabel", background="#1F4E78", foreground="#FFFFFF", font=("Arial", 22, "bold"), padding=18)
+        style.configure("Section.TLabel", background="#FFFFFF", foreground="#1F4E78", font=("Arial", 12, "bold"))
+        style.configure("Card.TLabel", background="#FFFFFF", foreground="#44546A", font=("Arial", 10))
+        style.configure("Primary.TButton", font=("Arial", 12, "bold"), padding=10)
+        ttk.Label(self, text="PM Analyzer  |  تحليل الصيانة الوقائية", style="Title.TLabel", anchor="center").pack(fill="x", pady=(0, 16))
+        files_card = ttk.Frame(self, style="Card.TFrame", padding=18)
+        files_card.pack(fill="x")
+        ttk.Label(files_card, text="مصادر البيانات", style="Section.TLabel").pack(anchor="e", pady=(0, 10))
+        ttk.Label(files_card, text="① ملفات GPS — اختر من ملف واحد إلى 7 ملفات", style="Card.TLabel").pack(anchor="e")
+        ttk.Button(files_card, text="استدعاء ملفات GPS", command=self._select_gps).pack(fill="x", pady=5)
+        self.gps_label = ttk.Label(
+            files_card, text="لم يتم اختيار ملفات", anchor="e", style="Card.TLabel"
+        )
+        self.gps_label.pack(fill="x", pady=(0, 8))
+        ttk.Label(files_card, text="② ملف أوامر الصيانة — المصدر الأساسي للمعدات", style="Card.TLabel").pack(anchor="e")
+        ttk.Button(files_card, text="اختيار ملف أوامر الصيانة", command=self._select_maintenance).pack(fill="x", pady=5)
+        self.maintenance_label = ttk.Label(files_card, text="لم يتم اختيار ملف", anchor="e", style="Card.TLabel")
+        self.maintenance_label.pack(fill="x", pady=(0, 8))
+        ttk.Label(files_card, text="③ ملف صرف المواد", style="Card.TLabel").pack(anchor="e")
+        ttk.Button(files_card, text="اختيار ملف صرف المواد", command=self._select_materials).pack(fill="x", pady=5)
+        self.materials_label = ttk.Label(files_card, text="لم يتم اختيار ملف", anchor="e", style="Card.TLabel")
         self.materials_label.pack(fill="x")
-        options = ttk.Frame(self)
-        options.pack(fill="x", pady=15)
-        ttk.Label(options, text="فترة الصيانة (كم)").grid(row=0, column=3, padx=5)
-        ttk.Entry(options, textvariable=self.interval, width=12).grid(row=0, column=2)
-        ttk.Label(options, text="نسبة الصيانة القريبة %").grid(row=0, column=1, padx=5)
-        ttk.Entry(options, textvariable=self.threshold, width=8).grid(row=0, column=0)
-        ttk.Button(self, text="إنشاء وتصدير التقرير", command=self._run).pack(fill="x", ipady=8)
+
+        policy_card = ttk.Frame(self, style="Card.TFrame", padding=18)
+        policy_card.pack(fill="x", pady=14)
+        ttk.Label(policy_card, text="إعدادات دورة الصيانة", style="Section.TLabel").grid(row=0, column=0, columnspan=6, sticky="e", pady=(0, 12))
+        ttk.Label(policy_card, text="كل ساعة تشغيل ساكن تعادل", style="Card.TLabel").grid(row=1, column=5, padx=5, sticky="e")
+        ttk.Entry(policy_card, textvariable=self.idle_equivalent, width=10, justify="center").grid(row=1, column=4)
+        ttk.Label(policy_card, text="كم", style="Card.TLabel").grid(row=1, column=3, padx=(3, 25))
+        ttk.Label(policy_card, text="الصيانة الوقائية كل", style="Card.TLabel").grid(row=1, column=2, padx=5, sticky="e")
+        ttk.Entry(policy_card, textvariable=self.interval, width=12, justify="center").grid(row=1, column=1)
+        ttk.Label(policy_card, text="كم", style="Card.TLabel").grid(row=1, column=0, padx=3)
+        ttk.Label(policy_card, text="تنبيه الصيانة القريبة عند", style="Card.TLabel").grid(row=2, column=5, padx=5, pady=(12, 0), sticky="e")
+        ttk.Entry(policy_card, textvariable=self.threshold, width=10, justify="center").grid(row=2, column=4, pady=(12, 0))
+        ttk.Label(policy_card, text="% من الدورة", style="Card.TLabel").grid(row=2, column=3, pady=(12, 0), sticky="w")
+        policy_card.columnconfigure(5, weight=1)
+        ttk.Button(self, text="إنشاء وتصدير تقرير Excel", command=self._run, style="Primary.TButton").pack(fill="x", ipady=7)
         ttk.Label(self, textvariable=self.status, anchor="center", foreground="#1F4E78").pack(fill="x", pady=12)
         self.pack(fill="both", expand=True)
 
@@ -79,6 +100,16 @@ class AnalyzerApp(ttk.Frame):
         if not self.gps_paths or self.maintenance_path is None or self.materials_path is None:
             messagebox.showwarning("ملفات ناقصة", "اختر ملفات GPS وملف الأوامر وملف صرف المواد أولاً")
             return
+        try:
+            interval = self.interval.get()
+            threshold = self.threshold.get()
+            idle_equivalent = self.idle_equivalent.get()
+        except tk.TclError:
+            messagebox.showerror("إعدادات غير صالحة", "أدخل أرقاماً صحيحة في إعدادات دورة الصيانة")
+            return
+        if interval <= 0 or idle_equivalent < 0 or not 0 <= threshold <= 100:
+            messagebox.showerror("إعدادات غير صالحة", "راجع فترة الصيانة ومعامل الساكن ونسبة التنبيه")
+            return
         output = filedialog.asksaveasfilename(
             title="حفظ تقرير الصيانة الوقائية",
             defaultextension=".xlsx",
@@ -94,8 +125,9 @@ class AnalyzerApp(ttk.Frame):
                 self.maintenance_path,
                 self.materials_path,
                 self.gps_paths,
-                interval_km=self.interval.get(),
-                due_soon_percent=self.threshold.get(),
+                interval_km=interval,
+                due_soon_percent=threshold,
+                idle_hour_equivalent_km=idle_equivalent,
             )
             export_report(self.result, Path(output))
         except (OSError, ValueError) as error:

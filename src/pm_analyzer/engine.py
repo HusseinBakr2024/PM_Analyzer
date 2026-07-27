@@ -45,11 +45,12 @@ def analyze(
     *,
     interval_km: int = PM_INTERVAL_KM,
     due_soon_percent: int = DUE_SOON_PERCENT,
+    idle_hour_equivalent_km: float = IDLE_HOUR_EQUIVALENT_KM,
 ) -> AnalysisResult:
     """Analyze preventive maintenance using SAP as the authoritative asset population."""
     if not 1 <= len(gps_paths) <= 7:
         raise ValueError("Select between 1 and 7 GPS files")
-    if interval_km <= 0 or not 0 <= due_soon_percent <= 100:
+    if interval_km <= 0 or not 0 <= due_soon_percent <= 100 or idle_hour_equivalent_km < 0:
         raise ValueError("Maintenance policy values are invalid")
 
     result = AnalysisResult()
@@ -59,7 +60,15 @@ def analyze(
     result.maintenance = list(orders.values())
     result.materials = material_rows
     result.gps = gps_rows
-    result.analysis = _calculate(orders, material_rows, gps_rows, result, interval_km, due_soon_percent)
+    result.analysis = _calculate(
+        orders,
+        material_rows,
+        gps_rows,
+        result,
+        interval_km,
+        due_soon_percent,
+        idle_hour_equivalent_km,
+    )
     return result
 
 
@@ -207,6 +216,7 @@ def _calculate(
     result: AnalysisResult,
     interval: int,
     threshold: int,
+    idle_equivalent: float,
 ) -> list[dict[str, Any]]:
     engine_oil_by_asset: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for material in materials:
@@ -225,13 +235,33 @@ def _calculate(
         latest_oil = max(oil_rows, key=lambda item: item["posting_date"]) if oil_rows else None
         if latest_oil is None:
             latest_order = max(orders_by_asset[asset], key=lambda item: item["reference_at"] or date.min)
-            output.append(_analysis_row(asset, latest_order, None, [], interval, threshold, "No Previous PM"))
+            output.append(
+                _analysis_row(
+                    asset,
+                    latest_order,
+                    None,
+                    [],
+                    interval,
+                    threshold,
+                    idle_equivalent,
+                    "No Previous PM",
+                )
+            )
             continue
         latest_order = orders[str(latest_oil["order_id"])]
         pm_date = latest_oil["posting_date"]
         available = sorted((row for row in gps_by_asset.get(asset, []) if row["gps_date"] >= pm_date), key=lambda row: row["gps_date"])
         status = None if available else "No GPS Data"
-        record = _analysis_row(asset, latest_order, pm_date, available, interval, threshold, status)
+        record = _analysis_row(
+            asset,
+            latest_order,
+            pm_date,
+            available,
+            interval,
+            threshold,
+            idle_equivalent,
+            status,
+        )
         all_asset_gps = gps_by_asset.get(asset, [])
         if available and all_asset_gps and min(row["gps_date"] for row in all_asset_gps) > pm_date:
             record["note"] = "تغطية GPS تبدأ بعد تاريخ آخر صيانة"
@@ -253,12 +283,13 @@ def _analysis_row(
     gps: list[dict[str, Any]],
     interval: int,
     threshold: int,
+    idle_equivalent: float,
     forced_status: str | None,
 ) -> dict[str, Any]:
     distance = sum(float(row["distance_km"] or 0) for row in gps)
     engine = sum(float(row["engine_hours"] or 0) for row in gps)
     idle = sum(float(row["idle_hours"] or 0) for row in gps)
-    idle_km = idle * IDLE_HOUR_EQUIVALENT_KM
+    idle_km = idle * idle_equivalent
     equivalent = distance + idle_km
     usage = equivalent / interval * 100
     if forced_status:
@@ -284,6 +315,7 @@ def _analysis_row(
         "idle_equivalent_km": round(idle_km, 2),
         "equivalent_km": round(equivalent, 2),
         "interval_km": interval,
+        "idle_hour_factor": idle_equivalent,
         "remaining_km": round(interval - equivalent, 2),
         "usage_percent": round(usage, 2),
         "status": status,
@@ -299,6 +331,7 @@ def export_report(result: AnalysisResult, path: Path) -> None:
         ("gps_first", "أول تاريخ GPS محسوب"), ("gps_last", "آخر تاريخ GPS محسوب"),
         ("gps_days", "عدد أيام GPS"), ("distance_km", "إجمالي الكيلومترات"),
         ("engine_hours", "إجمالي ساعات التشغيل"), ("idle_hours", "ساعات التشغيل الساكن"),
+        ("idle_hour_factor", "معامل الساعة الساكنة كم/ساعة"),
         ("idle_equivalent_km", "الكيلومترات المكافئة للساكن"),
         ("equivalent_km", "إجمالي الكيلومترات المكافئة"), ("interval_km", "فترة الصيانة"),
         ("remaining_km", "المتبقي حتى الصيانة"), ("usage_percent", "نسبة استهلاك الدورة %"),
