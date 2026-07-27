@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from pm_analyzer.config import Settings, UserPreferences
+from pm_analyzer.config import Settings
 
 
 def test_settings_are_loaded_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:

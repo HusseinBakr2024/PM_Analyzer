@@ -12,12 +12,20 @@ from pathlib import Path
 from typing import Any
 
 from pm_analyzer.material_map import PMMaterialMap
+from pm_analyzer.config import DUE_SOON_PERCENT, IDLE_HOUR_EQUIVALENT_KM, PM_INTERVAL_KM
 from pm_analyzer.xlsx import read_workbook, write_report
 
 _TRUCK_PATTERN = re.compile(r"HT-\d{2}-(?:M|C|STH)-\d+", re.IGNORECASE)
 _ORDER_PATTERN = re.compile(r"^(.*?)\s*\((\d+)\)\s*$")
 _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _MISSING = {"", "-----", "N/A", "NONE", "NULL"}
+_CATEGORIES = (
+    ("Engine Oil", ("ENGINE OIL", "MOTOR OIL")),
+    ("Oil Filter", ("OIL FILTER", "FILTER OIL")),
+    ("Fuel Filter", ("FUEL FILTER", "DIESEL FILTER")),
+    ("Air Filter", ("AIR FILTER",)),
+    ("Water Separator", ("WATER SEPARATOR", "FUEL SEPARATOR", "FILTER-SEPARATOR")),
+)
 
 
 @dataclass(slots=True)
@@ -41,6 +49,9 @@ def analyze(
     due_soon_percent: int,
     idle_hour_equivalent_km: float,
     material_map: PMMaterialMap | None = None,
+    interval_km: int = PM_INTERVAL_KM,
+    due_soon_percent: int = DUE_SOON_PERCENT,
+    idle_hour_equivalent_km: float = IDLE_HOUR_EQUIVALENT_KM,
 ) -> AnalysisResult:
     """Analyze preventive maintenance using SAP as the authoritative asset population."""
     if not 1 <= len(gps_paths) <= 7:
@@ -53,6 +64,8 @@ def analyze(
     orders = _read_maintenance(maintenance_path, result)
     material_rows = _read_materials(materials_path, orders, result, knowledge)
     classifications = classify_orders(orders, material_rows, knowledge)
+    orders = _read_maintenance(maintenance_path, result)
+    material_rows = _read_materials(materials_path, orders, result)
     gps_rows = _read_gps(gps_paths, result)
     result.maintenance = list(orders.values())
     result.materials = material_rows
@@ -60,6 +73,9 @@ def analyze(
     result.order_classifications = classifications
     result.analysis = _calculate(
         orders,
+    result.analysis = _calculate(
+        orders,
+        material_rows,
         gps_rows,
         result,
         interval_km,
@@ -82,6 +98,7 @@ def _first_sheet(path: Path, preferred: str) -> list[dict[str, str]]:
 def _read_maintenance(path: Path, result: AnalysisResult) -> dict[str, dict[str, Any]]:
     rows = _first_sheet(path, "SAPUI5 Export")
     required = {"Execution Object", "Main Work Center"}
+    required = {"Execution Object", "Main Work Center", "Order Type"}
     if rows and not required.issubset(rows[0]):
         raise ValueError(f"Maintenance columns not recognized in {path.name}")
     orders: dict[str, dict[str, Any]] = {}
@@ -95,11 +112,15 @@ def _read_maintenance(path: Path, result: AnalysisResult) -> dict[str, dict[str,
         if not asset:
             result.quality.append(_issue("أمر بدون معدة", path.name, index, order))
             continue
+        order_type = row.get("Order Type", "").strip()
+        if "YA02" not in order_type.upper() and "PROACTIVE" not in order_type.upper():
+            continue
         orders[order] = {
             "asset_id": asset,
             "order_id": order,
             "work_center": row.get("Main Work Center", "").strip(),
             "order_type": row.get("Order Type", "").strip(),
+            "order_type": order_type,
             "created_at": parse_date(row.get("Created On/At (UTC)", "")),
             "reference_at": parse_date(row.get("Reference Date/Time (UTC)", "")),
             "actual_cost": parse_number(row.get("Actual Cost", "")),
@@ -113,6 +134,7 @@ def _read_materials(
     orders: dict[str, dict[str, Any]],
     result: AnalysisResult,
     material_map: PMMaterialMap,
+    path: Path, orders: dict[str, dict[str, Any]], result: AnalysisResult
 ) -> list[dict[str, Any]]:
     rows = _first_sheet(path, "SAPUI5 Export")
     required = {"Order", "Material", "Posting Date"}
@@ -128,6 +150,9 @@ def _read_materials(
             continue
         description = clean_text(row.get("Material", ""))
         match = material_map.match(description)
+        category = classify_material(description)
+        if category is None:
+            continue
         posting_date = parse_date(row.get("Posting Date", ""))
         if posting_date is None:
             result.quality.append(_issue("تاريخ صرف غير صالح", path.name, index, order))
@@ -138,6 +163,7 @@ def _read_materials(
                 "category": match[0] if match else "",
                 "pm_weight": match[1] if match else 0,
                 "matched_keyword": match[2] if match else "",
+                "category": category,
                 "material_group": row.get("Material Group", "").strip(),
                 "material": description,
                 "quantity": parse_number(row.get("Quantity", "")),
@@ -262,6 +288,7 @@ def _read_gps(paths: list[Path], result: AnalysisResult) -> list[dict[str, Any]]
 
 def _calculate(
     orders: dict[str, dict[str, Any]],
+    materials: list[dict[str, Any]],
     gps: list[dict[str, Any]],
     result: AnalysisResult,
     interval: int,
@@ -273,6 +300,11 @@ def _calculate(
     for classification in classifications:
         if classification["classification"] == "PM" and classification["posting_date"] is not None:
             pm_by_asset[str(classification["asset_id"])].append(classification)
+) -> list[dict[str, Any]]:
+    engine_oil_by_asset: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for material in materials:
+        if material["category"] == "Engine Oil" and material["posting_date"] is not None:
+            engine_oil_by_asset[str(material["asset_id"])].append(material)
     orders_by_asset: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for order in orders.values():
         orders_by_asset[str(order["asset_id"])].append(order)
@@ -285,6 +317,9 @@ def _calculate(
         pm_orders = pm_by_asset.get(asset, [])
         latest_pm = max(pm_orders, key=lambda item: item["posting_date"]) if pm_orders else None
         if latest_pm is None:
+        oil_rows = engine_oil_by_asset.get(asset, [])
+        latest_oil = max(oil_rows, key=lambda item: item["posting_date"]) if oil_rows else None
+        if latest_oil is None:
             latest_order = max(orders_by_asset[asset], key=lambda item: item["reference_at"] or date.min)
             output.append(
                 _analysis_row(
@@ -303,6 +338,8 @@ def _calculate(
         latest_order["pm_score"] = latest_pm["pm_score"]
         latest_order["pm_evidence"] = latest_pm["evidence"]
         pm_date = latest_pm["posting_date"]
+        latest_order = orders[str(latest_oil["order_id"])]
+        pm_date = latest_oil["posting_date"]
         available = sorted((row for row in gps_by_asset.get(asset, []) if row["gps_date"] >= pm_date), key=lambda row: row["gps_date"])
         status = None if available else "No GPS Data"
         record = _analysis_row(
@@ -375,11 +412,14 @@ def _analysis_row(
         "pm_evidence": order.get("pm_evidence", ""),
         "status": status,
         "note": "لا توجد بيانات GPS بعد الصيانة" if status == "No GPS Data" else "لم يتم العثور على أمر مصنف صيانة وقائية من المواد" if status == "No Previous PM" else "",
+        "status": status,
+        "note": "لا توجد بيانات GPS بعد الصيانة" if status == "No GPS Data" else "لم يتم العثور على صرف زيت محرك" if status == "No Previous PM" else "",
     }
 
 
 def export_report(result: AnalysisResult, path: Path) -> None:
     """Export the eleven-sheet Arabic preventive-maintenance report."""
+    """Export the ten-sheet Arabic preventive-maintenance report."""
     columns = [
         ("asset_id", "كود المعدة"), ("order_id", "رقم آخر أمر صيانة"),
         ("pm_date", "تاريخ آخر صيانة"), ("work_center", "مركز العمل"), ("brand", "الشركة"),
@@ -414,6 +454,7 @@ def export_report(result: AnalysisResult, path: Path) -> None:
             if source["status"] == status
         ]
     maintenance_headers = ["كود المعدة", "رقم الأمر", "مركز العمل", "نوع الأمر (للعرض فقط)", "تاريخ الإنشاء", "التاريخ المرجعي", "التكلفة", "المرحلة", "درجة PM", "دليل المواد"]
+    maintenance_headers = ["كود المعدة", "رقم الأمر", "مركز العمل", "نوع الأمر", "تاريخ الإنشاء", "التاريخ المرجعي", "التكلفة", "المرحلة"]
     maintenance_by_order = {str(row["order_id"]): row for row in result.maintenance}
     latest_maintenance = [
         maintenance_by_order[str(row["order_id"])] for row in result.analysis
@@ -426,6 +467,11 @@ def export_report(result: AnalysisResult, path: Path) -> None:
     material_rows = [[r.get(key) for key in ("asset_id", "order_id", "category", "pm_weight", "matched_keyword", "material_group", "material", "quantity", "value", "posting_date", "storage_location", "valuation_type")] for r in pm_materials]
     classification_headers = ["كود المعدة", "رقم الأمر", "التصنيف", "درجة PM", "حد PM", "دليل المواد", "عدد المواد", "آخر تاريخ صرف", "نسخة الخريطة"]
     classification_rows = [[r.get(key) for key in ("asset_id", "order_id", "classification", "pm_score", "pm_threshold", "evidence", "material_count", "posting_date", "map_version")] for r in result.order_classifications]
+    maintenance_rows = [[r.get(key) for key in ("asset_id", "order_id", "work_center", "order_type", "created_at", "reference_at", "actual_cost", "subphase")] for r in latest_maintenance]
+    gps_headers = ["كود المعدة", "التاريخ", "المسافة كم", "ساعات التشغيل", "ساعات الساكن", "الشركة", "الملف"]
+    gps_rows = [[r.get(key) for key in ("asset_id", "gps_date", "distance_km", "engine_hours", "idle_hours", "brand", "source_file")] for r in result.gps]
+    material_headers = ["كود المعدة", "رقم الأمر", "التصنيف", "مجموعة المادة", "المادة", "الكمية", "القيمة", "تاريخ الصرف", "المخزن", "نوع التقييم"]
+    material_rows = [[r.get(key) for key in ("asset_id", "order_id", "category", "material_group", "material", "quantity", "value", "posting_date", "storage_location", "valuation_type")] for r in result.materials]
     quality_rows = [[r["issue"], r["source"], r["row"], r["value"]] for r in result.quality]
     write_report(path, [
         ("لوحة التحكم", ["المؤشر", "القيمة"], dashboard),
@@ -456,6 +502,14 @@ def clean_text(value: str) -> str:
 def classify_material(description: str, material_map: PMMaterialMap | None = None) -> str | None:
     match = (material_map or PMMaterialMap.load()).match(description)
     return match[0] if match else None
+def classify_material(description: str) -> str | None:
+    upper = clean_text(description).upper().replace("–", "-").replace("‑", "-")
+    if "OIL SEAL" in upper or "COIL" in upper or "HYDRAULIC OIL" in upper or "GEAR OIL" in upper or "ATF OIL" in upper:
+        return None
+    for category, keywords in _CATEGORIES:
+        if any(keyword in upper for keyword in keywords):
+            return category
+    return None
 
 
 def parse_number(value: object) -> float | None:

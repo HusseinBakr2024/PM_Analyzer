@@ -73,6 +73,7 @@ pm-analyzer analyze \
 The generated workbook contains the dashboard, due analysis, status-specific lists, latest
 maintenance, merged GPS detail, preventive-material detail, order-level PM classifications,
 scores/evidence, and data-quality findings.
+maintenance, merged GPS detail, preventive-material detail, and data-quality findings.
 
 ### Diagnostic commands
 

@@ -55,6 +55,10 @@ class UserPreferences:
         if self.due_soon_percent is None or not 0 < self.due_soon_percent < 100:
             raise ValueError("يجب أن تكون نسبة الصيانة القريبة بين 1 و99")
         return self
+# Preventive-maintenance policy. These values are intentionally simple to edit.
+PM_INTERVAL_KM = 10_000
+DUE_SOON_PERCENT = 80
+IDLE_HOUR_EQUIVALENT_KM = 30
 
 
 @dataclass(frozen=True, slots=True)

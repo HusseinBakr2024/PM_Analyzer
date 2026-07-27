@@ -28,6 +28,9 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_parser.add_argument("--interval-km", type=int, required=True)
     analyze_parser.add_argument("--due-soon-percent", type=int, required=True)
     analyze_parser.add_argument("--idle-equivalent-km", type=float, required=True)
+    analyze_parser.add_argument("--interval-km", type=int, default=10_000)
+    analyze_parser.add_argument("--due-soon-percent", type=int, default=80)
+    analyze_parser.add_argument("--idle-equivalent-km", type=float, default=30)
     return parser
 
 

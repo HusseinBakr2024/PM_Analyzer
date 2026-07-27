@@ -8,6 +8,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from pm_analyzer.config import UserPreferences
+from pm_analyzer.config import DUE_SOON_PERCENT, PM_INTERVAL_KM
 from pm_analyzer.engine import AnalysisResult, analyze, export_report
 
 
@@ -31,6 +32,9 @@ class AnalyzerApp(ttk.Frame):
         self.idle_equivalent = tk.StringVar(value=str(preferences.idle_equivalent_km or ""))
         self.policy_summary = tk.StringVar()
         self.result_summary = tk.StringVar(value="لم يتم تنفيذ تحليل بعد")
+        self.interval = tk.IntVar(value=PM_INTERVAL_KM)
+        self.threshold = tk.IntVar(value=DUE_SOON_PERCENT)
+        self.idle_equivalent = tk.DoubleVar(value=30)
         self._build()
 
     def _build(self) -> None:
@@ -77,6 +81,21 @@ class AnalyzerApp(ttk.Frame):
         self.progress.pack(fill="x", pady=(10, 3))
         ttk.Label(self, textvariable=self.status, anchor="center", foreground="#1F4E78").pack(fill="x", pady=12)
         ttk.Label(self, textvariable=self.result_summary, anchor="center", style="Success.TLabel").pack(fill="x")
+        policy_card = ttk.Frame(self, style="Card.TFrame", padding=18)
+        policy_card.pack(fill="x", pady=14)
+        ttk.Label(policy_card, text="إعدادات دورة الصيانة", style="Section.TLabel").grid(row=0, column=0, columnspan=6, sticky="e", pady=(0, 12))
+        ttk.Label(policy_card, text="كل ساعة تشغيل ساكن تعادل", style="Card.TLabel").grid(row=1, column=5, padx=5, sticky="e")
+        ttk.Entry(policy_card, textvariable=self.idle_equivalent, width=10, justify="center").grid(row=1, column=4)
+        ttk.Label(policy_card, text="كم", style="Card.TLabel").grid(row=1, column=3, padx=(3, 25))
+        ttk.Label(policy_card, text="الصيانة الوقائية كل", style="Card.TLabel").grid(row=1, column=2, padx=5, sticky="e")
+        ttk.Entry(policy_card, textvariable=self.interval, width=12, justify="center").grid(row=1, column=1)
+        ttk.Label(policy_card, text="كم", style="Card.TLabel").grid(row=1, column=0, padx=3)
+        ttk.Label(policy_card, text="تنبيه الصيانة القريبة عند", style="Card.TLabel").grid(row=2, column=5, padx=5, pady=(12, 0), sticky="e")
+        ttk.Entry(policy_card, textvariable=self.threshold, width=10, justify="center").grid(row=2, column=4, pady=(12, 0))
+        ttk.Label(policy_card, text="% من الدورة", style="Card.TLabel").grid(row=2, column=3, pady=(12, 0), sticky="w")
+        policy_card.columnconfigure(5, weight=1)
+        ttk.Button(self, text="إنشاء وتصدير تقرير Excel", command=self._run, style="Primary.TButton").pack(fill="x", ipady=7)
+        ttk.Label(self, textvariable=self.status, anchor="center", foreground="#1F4E78").pack(fill="x", pady=12)
         self.pack(fill="both", expand=True)
 
     def _select_gps(self) -> None:
@@ -162,6 +181,14 @@ class AnalyzerApp(ttk.Frame):
         except ValueError as error:
             messagebox.showerror("الإعدادات مطلوبة", str(error))
             self._open_settings()
+            interval = self.interval.get()
+            threshold = self.threshold.get()
+            idle_equivalent = self.idle_equivalent.get()
+        except tk.TclError:
+            messagebox.showerror("إعدادات غير صالحة", "أدخل أرقاماً صحيحة في إعدادات دورة الصيانة")
+            return
+        if interval <= 0 or idle_equivalent < 0 or not 0 <= threshold <= 100:
+            messagebox.showerror("إعدادات غير صالحة", "راجع فترة الصيانة ومعامل الساكن ونسبة التنبيه")
             return
         output = filedialog.asksaveasfilename(
             title="حفظ تقرير الصيانة الوقائية",
@@ -224,6 +251,23 @@ class AnalyzerApp(ttk.Frame):
             f"المعدات: {len(result.analysis)}  |  أوامر PM: {pm_orders}  |  مستحق: {counts.get('Due', 0)}  |  قريب: {counts.get('Due Soon', 0)}  |  بدون GPS: {counts.get('No GPS Data', 0)}"
         )
         self.status.set(f"تم إنشاء التقرير بنجاح: {output}")
+        self.status.set("جاري قراءة الملفات والحساب...")
+        self.update_idletasks()
+        try:
+            self.result = analyze(
+                self.maintenance_path,
+                self.materials_path,
+                self.gps_paths,
+                interval_km=interval,
+                due_soon_percent=threshold,
+                idle_hour_equivalent_km=idle_equivalent,
+            )
+            export_report(self.result, Path(output))
+        except (OSError, ValueError) as error:
+            self.status.set("تعذر إنشاء التقرير")
+            messagebox.showerror("خطأ", str(error))
+            return
+        self.status.set(f"تم إنشاء التقرير: {output}")
         messagebox.showinfo("تم", "تم إنشاء تقرير الصيانة الوقائية بنجاح")
 
 
