@@ -2,12 +2,59 @@
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
 _VALID_LOG_LEVELS = frozenset({"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"})
 
+_PREFERENCES_PATH = Path.home() / ".pm_analyzer" / "settings.json"
+
+
+@dataclass(frozen=True, slots=True)
+class UserPreferences:
+    """User-owned maintenance policy; no analytical defaults are embedded in code."""
+
+    interval_km: int | None = None
+    idle_equivalent_km: float | None = None
+    due_soon_percent: int | None = None
+
+    @classmethod
+    def load(cls, path: Path = _PREFERENCES_PATH) -> UserPreferences:
+        if not path.exists():
+            return cls()
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return cls(
+            interval_km=int(payload["interval_km"]),
+            idle_equivalent_km=float(payload["idle_equivalent_km"]),
+            due_soon_percent=int(payload["due_soon_percent"]),
+        ).validated()
+
+    def save(self, path: Path = _PREFERENCES_PATH) -> None:
+        values = self.validated()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "interval_km": values.interval_km,
+                    "idle_equivalent_km": values.idle_equivalent_km,
+                    "due_soon_percent": values.due_soon_percent,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    def validated(self) -> UserPreferences:
+        if self.interval_km is None or self.interval_km <= 0:
+            raise ValueError("يجب إدخال فترة صيانة أكبر من صفر")
+        if self.idle_equivalent_km is None or self.idle_equivalent_km < 0:
+            raise ValueError("يجب إدخال معامل تشغيل ساكن صالح")
+        if self.due_soon_percent is None or not 0 < self.due_soon_percent < 100:
+            raise ValueError("يجب أن تكون نسبة الصيانة القريبة بين 1 و99")
+        return self
 # Preventive-maintenance policy. These values are intentionally simple to edit.
 PM_INTERVAL_KM = 10_000
 DUE_SOON_PERCENT = 80

@@ -5,7 +5,19 @@ producing traceable maintenance, utilization, and cost analytics.
 
 The application provides an Arabic desktop workflow for selecting one to seven GPS workbooks,
 the SAP maintenance-order workbook, and the SAP material-document workbook. It calculates
-preventive-maintenance status and exports a ten-sheet, right-to-left Excel report.
+preventive-maintenance status and exports a styled, right-to-left Excel report.
+
+## Preventive-maintenance decision
+
+SAP maintenance orders are all loaded without filtering by `Order Type`. The type and material
+group remain in audit outputs only. Each order's complete material set is compared with the
+versioned PM Material Map in `src/pm_analyzer/data/pm_material_map.json`.
+
+The map assigns weights to oils, oil/fuel/air filters, water separators, grease, coolant, and
+hydraulic filters. Unique matched categories are scored once per order. The result is one of
+`PM`, `Uncertain`, `Corrective`, `Breakdown`, or `Unclassified`. A company can review and edit
+the JSON map (including enabled categories, keywords, weights, exclusions, and PM threshold)
+without changing the analysis engine.
 
 ## Requirements
 
@@ -36,13 +48,14 @@ Select the files in this order:
 3. `Material Documents` for preventive-maintenance materials and posting dates.
 4. Choose the output location and press the report button.
 
-The maintenance interval and due-soon percentage can be edited in the application. Their
-defaults, together with the 30-km idle-hour equivalent, are defined in `config.py`. The main
-window exposes all three policy inputs so the user can change them before every report:
+Open the independent settings window before the first report and enter all three policy values:
 
 - preventive-maintenance interval in kilometers;
 - equivalent kilometers for one idle hour;
 - due-soon percentage.
+
+The application does not embed analytical defaults. It saves the last validated policy in the
+current Windows user's home directory at `.pm_analyzer/settings.json` and restores it next time.
 
 ### Command-line report
 
@@ -58,6 +71,8 @@ pm-analyzer analyze \
 ```
 
 The generated workbook contains the dashboard, due analysis, status-specific lists, latest
+maintenance, merged GPS detail, preventive-material detail, order-level PM classifications,
+scores/evidence, and data-quality findings.
 maintenance, merged GPS detail, preventive-material detail, and data-quality findings.
 
 ### Diagnostic commands

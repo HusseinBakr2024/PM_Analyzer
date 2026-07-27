@@ -26,6 +26,9 @@ pm-analyzer-gui = "pm_analyzer.gui:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/pm_analyzer"]
 
+[tool.hatch.build]
+include = ["src/pm_analyzer/**/*.py", "src/pm_analyzer/data/*.json"]
+
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
 testpaths = ["tests"]
